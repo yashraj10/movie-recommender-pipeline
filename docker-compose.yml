@@ -1,0 +1,137 @@
+version: '3.8'
+
+# ══════════════════════════════════════════════════════════════════════
+# Movie Recommender Pipeline — Docker Compose
+# ══════════════════════════════════════════════════════════════════════
+# Services:
+#   - airflow-webserver:  UI at http://localhost:8080 (admin/admin)
+#   - airflow-scheduler:  Executes DAG tasks
+#   - airflow-init:       One-time DB init + user creation + pip installs
+#   - mlflow:             Experiment tracking at http://localhost:5000
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose ps             # Check status
+#   docker compose logs -f        # Tail logs
+#   docker compose down           # Stop all services
+# ══════════════════════════════════════════════════════════════════════
+
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:2.8.1-python3.11
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/dags/airflow.db
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    # AWS credentials (from .env file)
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    S3_BUCKET: ${S3_BUCKET:-movie-recommender-yashraj}
+    # MLflow
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./spark:/opt/airflow/spark
+    - ./model:/opt/airflow/model
+    - ./pipeline:/opt/airflow/pipeline
+    - ./data:/opt/airflow/data
+  networks:
+    - recommender-net
+
+services:
+  # ── Airflow Webserver ────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Airflow Scheduler ────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Airflow Init (one-time setup) ───────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "=== Initializing Airflow ==="
+        airflow db init
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Yashraj \
+          --lastname Jadhav \
+          --role Admin \
+          --email yashraj@example.com
+        echo "=== Installing Python dependencies ==="
+        pip install --no-cache-dir \
+          pyspark==3.5.4 \
+          tensorflow==2.15.0 \
+          mlflow==2.18.0 \
+          boto3 \
+          numpy \
+          scipy \
+          pandas \
+          pyarrow
+        echo "=== Airflow init complete ==="
+    restart: "no"
+
+  # ── MLflow Tracking Server ──────────────────────────────────────
+  mlflow:
+    image: python:3.11-slim
+    command: >
+      bash -c "
+        pip install --no-cache-dir mlflow==2.18.0 &&
+        mlflow server \
+          --host 0.0.0.0 \
+          --port 5000 \
+          --backend-store-uri sqlite:///mlflow.db \
+          --default-artifact-root /mlflow/artifacts
+      "
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - recommender-net
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mlflow-data:
+
+networks:
+  recommender-net:
+    driver: bridge
