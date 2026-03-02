@@ -46,7 +46,7 @@ class TestMatrixFactorization:
         # Forward pass to build weights (Keras 3 requirement)
         model(np.array([[0, 0]], dtype=np.int32))
 
-        expected = (n_users + n_items) * emb_dim + (n_users + n_items)
+        expected = (n_users + n_items) * emb_dim + (n_users + n_items) + 1  # +1 for global_bias scalar
         actual = model.count_params()
 
         assert actual == expected, f"Expected {expected} params, got {actual}"
