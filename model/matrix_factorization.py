@@ -17,11 +17,13 @@ Reference:
 import logging
 from typing import Dict
 
+import keras
 import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
 
+@keras.saving.register_keras_serializable(package="MovieRecommender")
 class MatrixFactorization(tf.keras.Model):
     """
     Dot-product matrix factorization with bias terms.
@@ -55,8 +57,8 @@ class MatrixFactorization(tf.keras.Model):
         self.n_users = n_users
         self.n_items = n_items
         self.embedding_dim = embedding_dim
+        self.l2_reg = l2_reg
 
-        # User and item embedding layers
         self.user_embedding = tf.keras.layers.Embedding(
             input_dim=n_users,
             output_dim=embedding_dim,
@@ -72,7 +74,6 @@ class MatrixFactorization(tf.keras.Model):
             name="item_embedding",
         )
 
-        # Bias terms (one scalar per user/item)
         self.user_bias = tf.keras.layers.Embedding(
             input_dim=n_users,
             output_dim=1,
@@ -86,7 +87,6 @@ class MatrixFactorization(tf.keras.Model):
             name="item_bias",
         )
 
-        # Global bias
         self.global_bias = tf.Variable(0.0, name="global_bias")
 
     def call(self, inputs, training=False):
@@ -94,40 +94,44 @@ class MatrixFactorization(tf.keras.Model):
         Forward pass.
 
         Args:
-            inputs: Tensor of shape (batch_size, 2) where
+            inputs: Tensor of shape (batch_size, 2)
                     inputs[:, 0] = user_ids, inputs[:, 1] = item_ids
-            training: Whether in training mode (unused here, but required by Keras)
+            training: Whether in training mode (unused here, required by Keras)
 
         Returns:
             Tensor of shape (batch_size,) with predicted interaction probabilities
         """
-        user_ids = inputs[:, 0]  # (batch,)
-        item_ids = inputs[:, 1]  # (batch,)
+        user_ids = inputs[:, 0]
+        item_ids = inputs[:, 1]
 
-        # Embeddings: (batch, embedding_dim)
         user_emb = self.user_embedding(user_ids)
         item_emb = self.item_embedding(item_ids)
 
-        # Dot product: (batch,)
         dot = tf.reduce_sum(user_emb * item_emb, axis=1)
 
-        # Biases: (batch,)
         u_bias = tf.squeeze(self.user_bias(user_ids), axis=1)
         i_bias = tf.squeeze(self.item_bias(item_ids), axis=1)
 
-        # Score = dot + biases
         score = dot + u_bias + i_bias + self.global_bias
 
-        # Sigmoid for implicit feedback (probability of interaction)
         return tf.sigmoid(score)
 
     def get_config(self) -> Dict:
-        """Serialization config for model saving."""
+        """
+        All __init__ args — required for .keras format save/load.
+        Keras calls this to serialize the model architecture.
+        """
         return {
             "n_users": self.n_users,
             "n_items": self.n_items,
             "embedding_dim": self.embedding_dim,
+            "l2_reg": self.l2_reg,
         }
+
+    @classmethod
+    def from_config(cls, config):
+        """Reconstruct model from get_config() dict."""
+        return cls(**config)
 
     def summary_stats(self) -> str:
         """Human-readable model summary."""
@@ -152,18 +156,15 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
 
-    # Create model with small dimensions for testing
-    model = MatrixFactorization(n_users=1000, n_items=500, embedding_dim=64)
-
-    # Test forward pass
     import numpy as np
+
+    model = MatrixFactorization(n_users=1000, n_items=500, embedding_dim=64)
     test_input = tf.constant(np.array([[0, 1], [2, 3], [999, 499]]), dtype=tf.int32)
     output = model(test_input)
 
-    print(f"✓ Model created")
     print(model.summary_stats())
-    print(f"✓ Forward pass output shape: {output.shape}")  # (3,)
+    print(f"✓ Forward pass output shape: {output.shape}")
     print(f"✓ Output range: [{output.numpy().min():.4f}, {output.numpy().max():.4f}]")
     assert output.shape == (3,), f"Expected (3,), got {output.shape}"
     assert tf.reduce_all(output >= 0) and tf.reduce_all(output <= 1), "Output not in [0,1]"
-    print(f"✓ All assertions passed — MF model is valid")
+    print("✓ All assertions passed — MF model is valid")

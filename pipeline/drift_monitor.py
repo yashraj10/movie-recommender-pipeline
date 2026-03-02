@@ -26,6 +26,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+PSI_THRESHOLD = 0.2  # PSI > 0.2 = significant drift, block promotion
 # ── Configuration ──────────────────────────────────────────────────────
 PSI_THRESHOLD_FAIL = 0.2      # Above this → block promotion
 PSI_THRESHOLD_WARN = 0.1      # Above this → log warning

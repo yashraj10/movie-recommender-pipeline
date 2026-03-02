@@ -26,11 +26,13 @@ Reference:
 import logging
 from typing import Dict, List
 
+import keras
 import tensorflow as tf
 
 logger = logging.getLogger(__name__)
 
 
+@keras.saving.register_keras_serializable(package="MovieRecommender")
 class NeuralCollaborativeFiltering(tf.keras.Model):
     """
     Two-tower NCF: GMF + MLP with fusion layer.
@@ -75,6 +77,7 @@ class NeuralCollaborativeFiltering(tf.keras.Model):
         if mlp_layers is None:
             mlp_layers = [128, 64, 32]
 
+        # Store all constructor args — needed by get_config()
         self.n_users = n_users
         self.n_items = n_items
         self.gmf_dim = gmf_dim
@@ -140,20 +143,19 @@ class NeuralCollaborativeFiltering(tf.keras.Model):
         Returns:
             Tensor of shape (batch_size,) with predicted interaction probabilities
         """
-        user_ids = inputs[:, 0]  # (batch,)
-        item_ids = inputs[:, 1]  # (batch,)
+        user_ids = inputs[:, 0]
+        item_ids = inputs[:, 1]
 
-        # ── GMF Tower ──────────────────────────────────────────────
-        gmf_user = self.gmf_user_emb(user_ids)   # (batch, gmf_dim)
-        gmf_item = self.gmf_item_emb(item_ids)   # (batch, gmf_dim)
-        gmf_output = gmf_user * gmf_item          # Element-wise (Hadamard) product
+        # GMF Tower
+        gmf_user = self.gmf_user_emb(user_ids)
+        gmf_item = self.gmf_item_emb(item_ids)
+        gmf_output = gmf_user * gmf_item  # Hadamard product
 
-        # ── MLP Tower ──────────────────────────────────────────────
-        mlp_user = self.mlp_user_emb(user_ids)    # (batch, mlp_dim)
-        mlp_item = self.mlp_item_emb(item_ids)    # (batch, mlp_dim)
-        mlp_input = tf.concat([mlp_user, mlp_item], axis=1)  # (batch, mlp_dim * 2)
+        # MLP Tower
+        mlp_user = self.mlp_user_emb(user_ids)
+        mlp_item = self.mlp_item_emb(item_ids)
+        x = tf.concat([mlp_user, mlp_item], axis=1)
 
-        x = mlp_input
         for dense, bn, dropout in zip(
             self.mlp_dense_layers, self.mlp_bn_layers, self.mlp_dropout_layers
         ):
@@ -161,14 +163,18 @@ class NeuralCollaborativeFiltering(tf.keras.Model):
             x = bn(x, training=training)
             x = dropout(x, training=training)
 
-        # ── Fusion ─────────────────────────────────────────────────
-        combined = tf.concat([gmf_output, x], axis=1)  # (batch, gmf_dim + mlp_layers[-1])
-        output = self.output_layer(combined)             # (batch, 1)
+        # Fusion
+        combined = tf.concat([gmf_output, x], axis=1)
+        output = self.output_layer(combined)
 
-        return tf.squeeze(output, axis=1)                # (batch,)
+        return tf.squeeze(output, axis=1)
 
     def get_config(self) -> Dict:
-        """Serialization config for model saving."""
+        """
+        All __init__ args — required for .keras format save/load.
+        Keras calls this to serialize the model architecture.
+        from_config() uses this dict to reconstruct the model exactly.
+        """
         return {
             "n_users": self.n_users,
             "n_items": self.n_items,
@@ -178,22 +184,25 @@ class NeuralCollaborativeFiltering(tf.keras.Model):
             "dropout_rate": self.dropout_rate,
         }
 
+    @classmethod
+    def from_config(cls, config):
+        """Reconstruct model from get_config() dict."""
+        return cls(**config)
+
     def summary_stats(self) -> str:
         """Human-readable model summary."""
         gmf_params = (self.n_users + self.n_items) * self.gmf_dim
         mlp_emb_params = (self.n_users + self.n_items) * self.mlp_dim
 
         mlp_dense_params = 0
-        prev_dim = self.mlp_dim * 2  # Concatenated input
+        prev_dim = self.mlp_dim * 2
         for units in self.mlp_layer_sizes:
-            mlp_dense_params += prev_dim * units + units  # weights + bias
-            mlp_dense_params += units * 4  # BatchNorm (gamma, beta, mean, var)
+            mlp_dense_params += prev_dim * units + units
+            mlp_dense_params += units * 4  # BatchNorm: gamma, beta, mean, var
             prev_dim = units
 
-        # Output layer
         fusion_dim = self.gmf_dim + self.mlp_layer_sizes[-1]
-        output_params = fusion_dim + 1  # weights + bias
-
+        output_params = fusion_dim + 1
         total = gmf_params + mlp_emb_params + mlp_dense_params + output_params
 
         return (
@@ -218,7 +227,6 @@ if __name__ == "__main__":
 
     import numpy as np
 
-    # Create model
     model = NeuralCollaborativeFiltering(
         n_users=1000, n_items=500,
         gmf_dim=64, mlp_dim=64,
@@ -226,23 +234,15 @@ if __name__ == "__main__":
         dropout_rate=0.2,
     )
 
-    # Test forward pass
     test_input = tf.constant(np.array([[0, 1], [2, 3], [999, 499]]), dtype=tf.int32)
 
-    # Training mode
-    output_train = model(test_input, training=True)
-    print(f"✓ Training forward pass: shape={output_train.shape}")
+    out_train = model(test_input, training=True)
+    out_infer = model(test_input, training=False)
 
-    # Inference mode
-    output_infer = model(test_input, training=False)
-    print(f"✓ Inference forward pass: shape={output_infer.shape}")
-
-    print(f"\n{model.summary_stats()}")
-
-    # Validate output
-    assert output_infer.shape == (3,), f"Expected (3,), got {output_infer.shape}"
-    assert tf.reduce_all(output_infer >= 0) and tf.reduce_all(output_infer <= 1), (
-        "Output not in [0,1]"
-    )
-    print(f"✓ Output range: [{output_infer.numpy().min():.4f}, {output_infer.numpy().max():.4f}]")
-    print(f"✓ All assertions passed — NCF model is valid")
+    print(model.summary_stats())
+    print(f"✓ Training output shape: {out_train.shape}")
+    print(f"✓ Inference output shape: {out_infer.shape}")
+    print(f"✓ Output range: [{out_infer.numpy().min():.4f}, {out_infer.numpy().max():.4f}]")
+    assert out_infer.shape == (3,), f"Expected (3,), got {out_infer.shape}"
+    assert tf.reduce_all(out_infer >= 0) and tf.reduce_all(out_infer <= 1), "Output not in [0,1]"
+    print("✓ All assertions passed — NCF model is valid")
