@@ -7,9 +7,8 @@
 [![PySpark 3.5](https://img.shields.io/badge/PySpark-3.5-green.svg)](https://spark.apache.org/)
 [![Airflow 2.8](https://img.shields.io/badge/Airflow-2.8-017CEE.svg)](https://airflow.apache.org/)
 [![MLflow 2.18](https://img.shields.io/badge/MLflow-2.18-0194E2.svg)](https://mlflow.org/)
-[![Tests](https://img.shields.io/badge/Tests-51%20passing-brightgreen.svg)](#testing)
+[![Tests](https://github.com/yashraj10/movie-recommender-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/yashraj10/movie-recommender-pipeline/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 ---
 
 ## 📊 Key Results
