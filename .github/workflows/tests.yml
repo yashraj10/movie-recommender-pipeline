@@ -1,0 +1,88 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Python ────────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Java (required by PySpark) ────────────────────────────────────────
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      # ── 4. Install dependencies ───────────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      # ── 5. Run unit tests (no GPU, no real AWS, no real data needed) ──────────
+      - name: Run unit tests
+        env:
+          PYSPARK_PYTHON: python3
+          PYSPARK_DRIVER_PYTHON: python3
+          AWS_ACCESS_KEY_ID: fake-key-for-moto
+          AWS_SECRET_ACCESS_KEY: fake-secret-for-moto
+          AWS_DEFAULT_REGION: us-east-1
+          S3_BUCKET: test-bucket
+          MLFLOW_TRACKING_URI: sqlite:///test_mlflow.db
+        run: |
+          python -m pytest tests/test_features.py tests/test_model.py tests/test_pipeline.py \
+            -v \
+            --tb=short \
+            --junit-xml=test-results.xml \
+            -x
+
+      # ── 6. Run integration tests ──────────────────────────────────────────────
+      - name: Run integration tests
+        env:
+          PYSPARK_PYTHON: python3
+          PYSPARK_DRIVER_PYTHON: python3
+          AWS_ACCESS_KEY_ID: fake-key-for-moto
+          AWS_SECRET_ACCESS_KEY: fake-secret-for-moto
+          AWS_DEFAULT_REGION: us-east-1
+          S3_BUCKET: test-bucket
+          MLFLOW_TRACKING_URI: sqlite:///test_mlflow.db
+        run: |
+          python -m pytest tests/test_integration.py \
+            -v \
+            --tb=short \
+            --junit-xml=integration-results.xml
+
+      # ── 7. Upload test results (visible in Actions tab) ───────────────────────
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: "*.xml"
+
+      # ── 8. Test summary in PR / push view ─────────────────────────────────────
+      - name: Test summary
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: pytest results
+          path: "*.xml"
+          reporter: java-junit
+          fail-on-error: true
