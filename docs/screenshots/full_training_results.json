@@ -1,0 +1,88 @@
+{
+  "dataset": "movielens-32m",
+  "data_stats": {
+    "n_users": 200948,
+    "n_items": 43884,
+    "train_rows": 25457887,
+    "val_rows": 3180500,
+    "test_rows": 3283080,
+    "total_rows": 31921467,
+    "train_after_neg_sampling": 127289435,
+    "val_after_neg_sampling": 6361000,
+    "train_neg_ratio": 4,
+    "val_neg_ratio": 1,
+    "neg_sampling_time_seconds": 69,
+    "n_features": 20,
+    "split_strategy": "temporal_per_user",
+    "cold_start_filter": "min_20_user_min_5_item"
+  },
+  "model_params": {
+    "mf_total_params": 15914081,
+    "ncf_total_params": 31365441
+  },
+  "mf_results": {
+    "HR@5": 0.8068,
+    "NDCG@5": 0.6166,
+    "HR@10": 0.9242,
+    "NDCG@10": 0.6553,
+    "HR@20": 0.9786,
+    "NDCG@20": 0.6693,
+    "Coverage@10": 0.0003,
+    "eval_time_seconds": 382.2,
+    "eval_users": 5000,
+    "coverage_users": 500
+  },
+  "ncf_results": {
+    "HR@5": 0.9164,
+    "NDCG@5": 0.7583,
+    "HR@10": 0.9740,
+    "NDCG@10": 0.7773,
+    "HR@20": 0.9902,
+    "NDCG@20": 0.7815,
+    "Coverage@10": 0.0100,
+    "eval_time_seconds": 390.5,
+    "eval_users": 5000,
+    "coverage_users": 500
+  },
+  "mf_training": {
+    "epochs_trained": 4,
+    "training_time_seconds": 2281,
+    "training_time_minutes": 38.0,
+    "best_val_loss": 0.4074,
+    "final_val_auc": 0.9447,
+    "early_stopped_at_epoch": 4,
+    "best_epoch": 1,
+    "lr_reduced_at_epoch": 3,
+    "batch_size": 4096,
+    "initial_lr": 0.001,
+    "steps_per_epoch": 31077
+  },
+  "ncf_training": {
+    "epochs_trained": 4,
+    "training_time_seconds": 2314,
+    "training_time_minutes": 38.6,
+    "best_val_loss": 0.3421,
+    "final_val_auc": 0.9613,
+    "early_stopped_at_epoch": 4,
+    "best_epoch": 1,
+    "lr_reduced_at_epoch": 3,
+    "batch_size": 4096,
+    "initial_lr": 0.001,
+    "steps_per_epoch": 31077
+  },
+  "ncf_vs_mf_delta": {
+    "HR@5": "+13.6%",
+    "HR@10": "+5.4%",
+    "HR@20": "+1.2%",
+    "NDCG@5": "+23.0%",
+    "NDCG@10": "+18.6%",
+    "NDCG@20": "+16.8%",
+    "Coverage@10": "+3233.3%"
+  },
+  "environment": {
+    "gpu": "NVIDIA A100 (Colab Pro)",
+    "runtime": "Google Colab",
+    "framework": "TensorFlow 2.15+",
+    "training_date": "2026-03-01"
+  }
+}

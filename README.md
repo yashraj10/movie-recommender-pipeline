@@ -1,34 +1,27 @@
 # Movie Recommender Pipeline
 
-Production-grade movie recommendation system with PySpark feature engineering, TensorFlow Neural Collaborative Filtering, Apache Airflow orchestration, MLflow experiment tracking, and PSI drift monitoring.
-
-**Built on MovieLens 32M** — 32 million ratings, 200K users, 87K movies.
-
-![Airflow DAG](docs/screenshots/airflow_dag_graph.png)
-
----
+Production-grade movie recommendation system built on **32M+ ratings** from MovieLens, featuring PySpark distributed feature engineering, TensorFlow Neural Collaborative Filtering, Apache Airflow pipeline orchestration, MLflow experiment tracking, and PSI drift monitoring.
 
 ## Key Results
 
-| Model | HR@5 | HR@10 | HR@20 | NDCG@10 | AUC | Coverage |
-|---|---|---|---|---|---|---|
-| Matrix Factorization (baseline) | — | — | — | — | — | — |
-| Neural Collaborative Filtering | — | — | — | — | — | — |
+| Model | HR@5 | HR@10 | HR@20 | NDCG@5 | NDCG@10 | NDCG@20 | Coverage@10 |
+|-------|------|-------|-------|--------|---------|---------|-------------|
+| Matrix Factorization (baseline) | 0.8068 | 0.9242 | 0.9786 | 0.6166 | 0.6553 | 0.6693 | 0.03% |
+| **Neural Collaborative Filtering** | **0.9164** | **0.9740** | **0.9902** | **0.7583** | **0.7773** | **0.7815** | **1.00%** |
+| **Δ (NCF vs MF)** | **+13.6%** | **+5.4%** | **+1.2%** | **+23.0%** | **+18.6%** | **+16.8%** | **+3233%** |
 
-> *Metrics will be populated after full training on Colab T4 GPU. Evaluation uses 1 positive + 99 negative candidates per user (RecSys standard protocol).*
-
----
+> NCF achieves **97.4% Hit Rate@10** with **18.6% better ranking quality** (NDCG@10) over the matrix factorization baseline. Trained on 127M samples (32M positives + 4:1 negative sampling) on an A100 GPU in ~38 minutes per model.
 
 ## Architecture
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                         APACHE AIRFLOW (Docker Compose)                          ║
-║   ┌──────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  ┌─────────┐  ┌────────┐     ║
-║   │Ingest│→ │Spark FE  │→ │Upload S3 │→ │Train TF │→ │Evaluate │→ │Promote │     ║
-║   │Data  │  │Pipeline  │  │Features  │  │NCF Model│  │+Drift   │  │or Block│     ║
-║   └──┬───┘  └────┬─────┘  └────┬─────┘  └────┬────┘  └────┬────┘  └───┬────┘     ║
-╚══════╪══════════╪═══════════╪═══════════════╪══════════════╪═══════════╪═════════╝
+║                         APACHE AIRFLOW (Docker Compose)                         ║
+║   ┌──────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  ┌─────────┐  ┌────────┐  ║
+║   │Ingest│→ │Spark FE  │→ │Upload S3 │→ │Train TF │→ │Evaluate │→ │Promote │  ║
+║   │Data  │  │Pipeline  │  │Features  │  │NCF Model│  │+Drift   │  │or Block│  ║
+║   └──┬───┘  └────┬─────┘  └────┬─────┘  └────┬────┘  └────┬────┘  └───┬────┘  ║
+╚══════╪══════════╪═══════════╪═══════════════╪══════════════╪═══════════╪═══════╝
        │          │           │               │              │           │
        ▼          ▼           ▼               ▼              ▼           ▼
   ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌────────┐ ┌────────┐
@@ -38,214 +31,34 @@ Production-grade movie recommendation system with PySpark feature engineering, T
   └─────────┘ └──────────┘ └──────────┘ └──────────────┘ └────────┘ └────────┘
 ```
 
----
-
 ## Components
 
-| Component | Technology | What It Does |
-|---|---|---|
-| **Feature Engineering** | PySpark 3.5 | 8 user features + 7 item features on 32M ratings, temporal per-user split, Parquet output |
-| **Baseline Model** | TF Matrix Factorization | Dot-product with bias terms — simple but strong baseline |
-| **Main Model** | TF Neural Collaborative Filtering | Two-tower GMF + MLP architecture (He et al., 2017) |
-| **Data Lake** | AWS S3 | 4-tier bucket: raw → features → models → mlflow-artifacts |
-| **Experiment Tracking** | MLflow 2.18 | Parameter/metric logging, model registry with Production stage |
-| **Pipeline Orchestration** | Apache Airflow 2.8 | 10-task DAG with parallel training and drift-gated promotion |
-| **Drift Monitoring** | PSI | 5 features monitored; PSI > 0.2 blocks model promotion |
-| **Testing** | pytest | 34 unit tests across features, models, and pipeline utilities |
+| Component | Technology | What It Does | Status |
+|-----------|-----------|--------------|--------|
+| Data Layer | MovieLens 32M | 32M ratings, 200K users, 44K movies | ✅ LIVE |
+| Feature Engineering | PySpark 3.5 | User/item/interaction features, temporal split, Parquet output | ✅ LIVE |
+| Baseline Model | TF Matrix Factorization | Dot-product + bias embeddings (16M params) | ✅ LIVE |
+| Main Model | TF Neural Collaborative Filtering | Two-tower GMF + MLP architecture (31M params) | ✅ LIVE |
+| Experiment Tracking | MLflow 2.18 | Params, metrics, training curves, model registry | ✅ LIVE |
+| Data Lake | AWS S3 (4-tier) | raw/ → features/ → models/ → mlflow-artifacts/ | ✅ LIVE |
+| Pipeline Orchestration | Apache Airflow 2.8 | 8-task DAG with branching drift gate | ✅ LIVE |
+| Drift Monitoring | PSI (5 features) | Blocks model promotion if PSI > 0.2 | ✅ LIVE |
+| Testing | pytest | 34 unit tests across features, models, and pipeline | ✅ LIVE |
 
----
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Docker & Docker Compose
-- Java 17 (for Spark)
-- AWS account with S3 bucket (optional — pipeline runs locally without it)
-
-### 1. Clone and Install
-
-```bash
-git clone https://github.com/yashraj10/movie-recommender-pipeline.git
-cd movie-recommender-pipeline
-pip install -r requirements.txt
-```
-
-### 2. Download Dataset
-
-```bash
-wget https://files.grouplens.org/datasets/movielens/ml-32m.zip
-unzip ml-32m.zip -d data/
-```
-
-### 3. Run Feature Engineering (PySpark)
-
-```bash
-python -m spark.feature_engineering
-```
-
-This processes 32M ratings into user/item features with temporal train/val/test split. Output: `data/features/` (Parquet).
-
-### 4. Train Models (CPU quick test)
-
-```bash
-python -m model.train
-```
-
-For full training on 32M interactions, use Google Colab with T4 GPU.
-
-### 5. Run Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-### 6. Start Airflow + MLflow
-
-```bash
-docker compose up -d
-
-# Airflow UI: http://localhost:8080 (admin/admin)
-# MLflow UI:  http://localhost:5000
-```
-
-### 7. Configure AWS (Optional)
-
-```bash
-cp .env.example .env
-# Edit .env with your AWS credentials
-```
-
----
-
-## Design Decisions
-
-### Why Temporal Split (Not Random)?
-
-Random train/test split leaks future information — the model sees ratings from 2023 during training and gets tested on 2018. **Temporal split is realistic**: for each user, the earliest 80% of ratings train, next 10% validate, last 10% test. The model never sees future behavior during training. This is how production recommendation systems work.
-
-### Why Two-Tower NCF?
-
-The GMF tower learns linear (multiplicative) user-item interactions through element-wise product. The MLP tower learns non-linear patterns through a 3-layer network (128 → 64 → 32). Separate embedding spaces let each tower specialize. The fusion layer combines both representations for the final prediction.
-
-### Why Spark for 32M Rows?
-
-Pandas can load 32M rows, but struggles with per-user window functions for temporal splitting and genre explosion joins. More importantly, Spark pipelines scale horizontally — replace `local[*]` with a Databricks or EMR cluster for production data volumes.
-
-### Why Implicit Feedback?
-
-Predicting ratings (explicit) doesn't reflect real recommendation — you want to predict **whether a user will engage**, not what score they'll give. Implicit feedback with 4:1 negative sampling (He et al., 2017) mirrors production systems at Netflix and Spotify.
-
-### Why PSI Drift Monitoring?
-
-If user behavior shifts (rating inflation, new genre popularity), the model's training data no longer represents reality. PSI detects distribution shifts across 5 key features. PSI > 0.2 blocks automatic promotion in the Airflow DAG, keeping the current Production model safe.
-
----
-
-## Airflow DAG
-
-10-task pipeline with parallel training and drift-gated promotion:
+## Dataset
 
 ```
-ingest_data → validate_data → spark_feature_engineering → upload_features_to_s3
-    → [train_mf_baseline, train_ncf_model] (parallel)
-        → evaluate_models → drift_check
-            → promote_model (if PSI < 0.2)
-            → block_and_alert (if PSI ≥ 0.2)
+MovieLens 32M (May 2024 release)
+Total ratings:     32,000,263
+Total users:       200,948
+Total movies:      43,884 (after cold-start filter)
+Sparsity:          99.82%
+Timespan:          1995 — 2023
 ```
-
-The `drift_check` task is a `BranchPythonOperator` — it dynamically routes the pipeline based on PSI results.
-
----
-
-## Project Structure
-
-```
-movie-recommender-pipeline/
-├── README.md
-├── docker-compose.yml              ← Airflow 2.8 + MLflow services
-├── requirements.txt
-├── .env.example                    ← AWS credentials template
-├── .gitignore
-│
-├── spark/
-│   ├── config.py                   ← SparkSession builder (3g driver, Kryo, snappy)
-│   ├── schemas.py                  ← StructType definitions for all tables
-│   └── feature_engineering.py      ← Full PySpark pipeline (58 min on 32M rows)
-│
-├── model/
-│   ├── matrix_factorization.py     ← TF MF baseline (dot product + bias)
-│   ├── ncf.py                      ← TF NCF two-tower (GMF + MLP)
-│   ├── data_loader.py              ← Parquet → negative sampling → TF Dataset
-│   ├── train.py                    ← Training loop (early stopping, LR scheduling)
-│   └── evaluate.py                 ← HR@K, NDCG@K, Coverage metrics
-│
-├── pipeline/
-│   ├── s3_utils.py                 ← AWS S3 upload/download with manifests
-│   ├── mlflow_tracking.py          ← Experiment logging + model registry
-│   └── drift_monitor.py            ← PSI drift detection (5 features, threshold=0.2)
-│
-├── airflow/
-│   └── dags/
-│       └── recommender_pipeline.py ← 10-task DAG with branching
-│
-├── tests/
-│   ├── conftest.py                 ← Shared fixtures
-│   ├── test_features.py            ← 8 Spark feature tests
-│   ├── test_model.py               ← 11 TF model tests
-│   └── test_pipeline.py            ← 15 pipeline utility tests
-│
-├── docs/
-│   ├── architecture.md
-│   └── screenshots/
-│       ├── airflow_dag.png
-│       └── airflow_dag_graph.png
-│
-└── data/                           ← .gitignore'd
-    ├── ml-32m/                     ← Raw MovieLens 32M CSVs
-    └── features/                   ← Spark Parquet output
-```
-
----
-
-## Feature Engineering Details
-
-### User Features (8)
-
-| Feature | Description |
-|---|---|
-| user_avg_rating | Mean rating across all movies |
-| user_rating_count | Total number of ratings |
-| user_rating_stddev | Rating variance (consistency) |
-| user_active_days | Days between first and last rating |
-| user_genre_diversity | Count of distinct genres rated |
-| user_avg_timestamp | Mean timestamp (recency proxy) |
-| user_positive_ratio | Fraction of ratings ≥ 4.0 |
-
-### Item Features (7)
-
-| Feature | Description |
-|---|---|
-| item_avg_rating | Mean rating received |
-| item_rating_count | Total ratings received |
-| item_rating_stddev | Rating variance |
-| item_genre_count | Number of genres |
-| item_recency_score | Exponential decay from last rating |
-| item_popularity_rank | Dense rank by rating count |
-
-### Pipeline Stats
-
-- **Input:** 32,000,263 ratings
-- **After cold-start filter:** 200,948 users → 200,948, 87,585 movies → 43,884
-- **Output:** 25.4M train / 3.2M val / 3.3M test interactions
-- **Runtime:** 58 minutes (4-core, 16GB Codespaces)
-
----
 
 ## Model Architecture
 
-### Neural Collaborative Filtering (NCF)
+### Neural Collaborative Filtering (Two-Tower)
 
 ```
 GMF Tower:                           MLP Tower:
@@ -264,48 +77,136 @@ Item ID → Embed(64) ─┘              Item ID → Embed(64) ─┘
                            P(interaction)
 ```
 
-- **Parameters:** ~25.6M (GMF 12.8M + MLP 12.8M + fusion 27K)
-- **Loss:** Binary Cross-Entropy (implicit feedback)
-- **Optimizer:** Adam (lr=0.001, with ReduceLROnPlateau)
-- **Negative sampling:** 4:1 ratio per positive interaction
+**Why Two-Tower:** GMF learns linear user-item interactions (like classic matrix factorization), while the MLP tower captures non-linear patterns. Combining both outperforms either alone — the MLP learned interaction patterns that a simple dot product misses, yielding +18.6% NDCG@10 improvement.
 
----
+## Training Details
 
-## Testing
+| Parameter | Value |
+|-----------|-------|
+| Training samples | 127,289,435 (25.5M positives + 4:1 negative sampling) |
+| Validation samples | 6,361,000 (1:1 ratio) |
+| Batch size | 4,096 |
+| Steps per epoch | 31,077 |
+| Optimizer | Adam (lr=0.001, ReduceLROnPlateau) |
+| Early stopping | patience=3 on val_loss |
+| GPU | NVIDIA A100 (Google Colab) |
+| Training time | ~38 min per model (4 epochs each) |
+| Split strategy | Temporal per-user (80/10/10) — no data leakage |
 
-34 tests across 3 test files, all passing:
+## Design Decisions
+
+**Why temporal split (not random)?** Random splits leak future information — the model would see 2023 ratings during training and get tested on 2018 ratings. Temporal per-user split ensures the model always trains on the past and predicts the future, matching production behavior.
+
+**Why Spark for 32M rows?** Pandas can technically handle 32M rows, but struggles with the window functions for per-user temporal splitting and genre explosion joins. More importantly, PySpark pipelines scale horizontally to hundreds of millions of rows without code changes — this demonstrates production readiness.
+
+**Why build NCF from scratch (not use a library)?** Libraries like Surprise or LightFM abstract away architecture decisions. Building in raw TensorFlow means every layer, every design choice, and every hyperparameter is explainable in an interview.
+
+**Why 4:1 negative sampling?** Standard in NCF literature (He et al., 2017). Too few negatives → model doesn't learn to distinguish; too many → class imbalance and slow training. 4:1 produces 127M training samples from 25M positive interactions.
+
+**Why low Coverage?** Both models show low Coverage@10 (MF: 0.03%, NCF: 1.0%), indicating popularity bias — a known limitation of pure collaborative filtering. NCF's 33x higher coverage shows the MLP tower surfaces more diverse items. A content-based hybrid extension (documented below) would address this.
+
+## Quick Start
+
+### Prerequisites
+```bash
+# Python 3.11+, Docker, AWS CLI configured
+pip install -r requirements.txt
+```
+
+### 1. Download Data
+```bash
+wget https://files.grouplens.org/datasets/movielens/ml-32m.zip
+unzip ml-32m.zip -d data/
+```
+
+### 2. Run PySpark Feature Engineering
+```bash
+python spark/feature_engineering.py
+# Output: data/features/ (Parquet files, ~58 min on 2-core machine)
+```
+
+### 3. Upload Features to S3
+```bash
+python pipeline/s3_utils.py
+# Uploads to s3://movie-recommender-yashraj/features/
+```
+
+### 4. Train Models (Google Colab)
+```bash
+# Upload notebooks/02_colab_full_training.ipynb to Colab
+# Select A100/T4 GPU runtime → Run All
+# Downloads: full_training_results.json, saved models
+```
+
+### 5. Start Airflow Pipeline
+```bash
+docker compose up -d
+# Airflow UI: http://localhost:8080 (admin/admin)
+# MLflow UI:  http://localhost:5000
+```
+
+### 6. Run Tests
+```bash
+python -m pytest tests/ -v
+# 34 tests covering features, models, and pipeline
+```
+
+## Airflow DAG
 
 ```
-tests/test_features.py   —  8 tests (Spark: cold start, temporal split, ID remap, features)
-tests/test_model.py      — 11 tests (TF: output shape/range, save/load, negative sampling)
-tests/test_pipeline.py   — 15 tests (PSI drift, MLflow promotion logic, S3 config)
+ingest_data → validate_data → spark_feature_engineering → upload_features_to_s3
+                                                              │
+                                              ┌───────────────┴───────────────┐
+                                              ▼                               ▼
+                                       train_mf_baseline              train_ncf_model
+                                              │                               │
+                                              └───────────┬───────────────────┘
+                                                          ▼
+                                                   evaluate_models
+                                                          │
+                                                          ▼
+                                                     drift_check
+                                                     ┌────┴────┐
+                                                     ▼         ▼
+                                              promote_model  block_and_alert
 ```
 
-Key tests:
-- **Temporal leakage detection:** Verifies max(train_timestamp) < min(val_timestamp) per user
-- **Negative sample integrity:** No overlap between positive interactions and negative samples
-- **Drift simulation:** PSI correctly blocks promotion when distributions shift by +1.0σ
+8 tasks, weekly schedule, BranchPythonOperator gates promotion on PSI drift check. If PSI > 0.2 on any of 5 monitored features, promotion is blocked and the current Production model stays.
 
----
+## S3 Data Lake Structure
+
+```
+s3://movie-recommender-yashraj/
+├── raw/                          ← Immutable source CSVs
+├── features/                     ← PySpark Parquet output
+│   ├── interactions/train/       ← 25.5M rows (8 Parquet files)
+│   ├── interactions/val/         ← 3.2M rows
+│   ├── interactions/test/        ← 3.3M rows
+│   ├── user_features/
+│   └── item_features/
+├── models/                       ← Versioned TF SavedModels
+└── mlflow-artifacts/             ← Experiment logs + registry
+```
 
 ## Known Limitations
 
-- **No real-time serving API** — this is a batch pipeline. Real-time serving is covered in my ICU Census project (FastAPI + GCP Cloud Run)
-- **No content-based features** — pure collaborative filtering. Hybrid with genre/tag embeddings is a documented next step
-- **Single-node Spark** — demonstrates PySpark proficiency. Replace `local[*]` with EMR/Databricks for horizontal scaling
-- **SequentialExecutor in Airflow** — SQLite backend requires this. Swap to PostgreSQL + LocalExecutor for production
-
----
+1. **Low item coverage** — pure collaborative filtering exhibits popularity bias. A content-based hybrid tower using genre/tag embeddings would improve diversity.
+2. **Offline evaluation only** — metrics computed on held-out test set, not live A/B test. Online evaluation with interleaving would better measure real-world performance.
+3. **Single-node Spark** — runs on `local[*]` mode. Production would use Databricks or EMR cluster for horizontal scaling.
+4. **No real-time serving** — batch pipeline only. A FastAPI endpoint with Redis caching would enable real-time top-K recommendations.
 
 ## Future Extensions
 
-1. **Hybrid model** — add content-based tower using movie genre and tag embeddings for cold-start items
+1. **Hybrid model** — add content-based tower using movie genre and tag embeddings to handle cold-start items
 2. **Online A/B testing** — interleaving framework to compare models with live user traffic
-3. **Real-time scoring** — FastAPI endpoint with Redis caching for top-K recommendations per user
-4. **Distributed training** — `tf.distribute.MirroredStrategy` for multi-GPU training on larger datasets
+3. **Real-time serving** — FastAPI + Redis for sub-100ms top-K scoring
+4. **Distributed training** — `tf.distribute.MirroredStrategy` for multi-GPU scaling
 
----
+## Tech Stack
 
-## Technologies
+PySpark 3.5 · TensorFlow 2.15 · Apache Airflow 2.8 · MLflow 2.18 · AWS S3 · Docker Compose · pytest · Google Colab (A100 GPU)
 
-PySpark • Apache Spark • Apache Airflow • TensorFlow • Keras • Recommendation Systems • Collaborative Filtering • Neural Collaborative Filtering • Matrix Factorization • Negative Sampling • Implicit Feedback • AWS S3 • MLflow • Model Registry • Pipeline Orchestration • Batch Processing • ETL • Feature Engineering • Data Lake • Model Governance • Drift Monitoring • Docker • Docker Compose • pytest
+## License
+
+Dataset: MovieLens 32M by GroupLens Research (research use permitted per GroupLens README).
+Code: MIT License.
